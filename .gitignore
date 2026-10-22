@@ -1,0 +1,37 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Facebook Session Profiles & Cookies (CRITICAL SECURITY)
+profiles/
+fb_profile/
+*.session
+*.log
+
+# User Data & History (Keeps your accounts & leads private)
+data/*.csv
+data/*.json
+data/history.json
+data/poster_history.json
+data/friend_requests_history.json
+data/leads.csv
+data/tier1_leads.csv
+data/viral_posts.csv
+data/accounts.json
+
+# Keep data folder tracked
+!data/.gitkeep
+
+# OS / Editor files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
