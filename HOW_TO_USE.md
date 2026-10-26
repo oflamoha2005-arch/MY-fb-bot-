@@ -30,12 +30,13 @@ Welcome to your **Facebook Group Lead & Traffic Bot**! This guide walks you thro
 Simply double-click **`start.bat`** (or run `py gui.py` in your terminal).
 A sleek, modern **Dark-Mode Desktop Dashboard** will open with dedicated tabs:
 
-1. 📢 **Auto-Poster Tab:** Paste Facebook group links, set story teasers, and automatically publish to groups every 4–6 minutes.
+0. ⚡ **Daily Master Task Tab (Flagship):** 1-Click Full Funnel Automation! Runs 10m Niche Warmer ➔ Daily Scout (1 Group) ➔ Comment Scraper ➔ Tier-1 Country Isolation ➔ Multi-Account Outreach (DM + Notification) & Friend Connector ➔ Conditional Group Story Posting.
+1. 📢 **Auto-Poster Tab:** Paste Facebook group links, set story teasers, and automatically publish to groups every 4–6 minutes with image attachments and memory continuity.
 2. 🔍 **Comment Scraper Tab:** Paste any post URL to extract readers who commented into your database.
 3. 💬 **Direct Messenger Tab:** Send personalized sample links to your scraped leads with human typing speed and anti-ban delays.
 4. 📝 **Templates Tab:** Easily edit your DM and Story Post templates with instant Spintax random preview.
 5. 📊 **Leads & Stats Tab:** View all extracted leads and open `leads.csv` directly in Excel.
-6. 🔥 **Account Warmer Tab:** Standalone warm-up sessions (feed scrolling, watching reels, natural likes) to build trust scores.
+6. 🔥 **Account Warmer Tab:** Standalone warm-up sessions (niche feed scrolling, watching stories ~11s, natural likes) to build trust scores.
 7. 🔎 **Viral Post Spy Tab:** Scan groups/pages for the most viral story posts, ranked by reactions, comments, and viral score.
 8. 🌍 **Tier-1 Lead Filter Tab:** Filter commenters and members by country (USA, UK, Canada, Australia) into `tier1_leads.csv`.
 9. 🤝 **Friend Connector Tab:** Send safe, human-spaced friend requests (10-15/day) to target readers to build an engaged 5,000-friend buyer profile.

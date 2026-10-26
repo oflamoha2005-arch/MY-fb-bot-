@@ -29,9 +29,17 @@ data/accounts.json
 
 # Keep data folder tracked
 !data/.gitkeep
+!data/tier1_locations.json
 
 # OS / Editor files
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Documentation & Scratch exports
+*.pdf
+scratch/
+tasks_to_develop.md
+
+

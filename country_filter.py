@@ -15,9 +15,10 @@ if sys.platform == "win32":
     except Exception:
         pass
 
-from config import LEADS_FILE, TIER1_LEADS_FILE, DEFAULT_TIER1_LOCATIONS
+from config import LEADS_FILE, TIER1_LEADS_FILE, DEFAULT_TIER1_LOCATIONS, load_tier1_locations
 from utils import console, load_leads
 from browser import FacebookBrowser, CheckpointDetectedError
+from scraper import extract_user_id
 
 class CountryLeadFilter:
     """
@@ -28,7 +29,7 @@ class CountryLeadFilter:
     def __init__(self, browser: FacebookBrowser, target_locations: list[str] = None):
         self.fb = browser
         self.page: Page = browser.page
-        self.target_locations = [loc.lower().strip() for loc in (target_locations or DEFAULT_TIER1_LOCATIONS)]
+        self.target_locations = [loc.lower().strip() for loc in (target_locations or load_tier1_locations())]
 
     def check_profile_location(self, profile_url: str) -> tuple[bool, str]:
         """
@@ -94,7 +95,11 @@ class CountryLeadFilter:
         is_target = False
         matched_keyword = ""
         for loc in self.target_locations:
-            pattern = r"\b" + re.escape(loc) + r"\b"
+            if loc.startswith(","):
+                code = loc.lstrip(", ").strip()
+                pattern = r",\s*" + re.escape(code) + r"\b"
+            else:
+                pattern = r"\b" + re.escape(loc) + r"\b"
             if re.search(pattern, page_text):
                 is_target = True
                 matched_keyword = loc.title()
@@ -103,14 +108,24 @@ class CountryLeadFilter:
         full_desc = detected_loc if detected_loc else (matched_keyword if is_target else "Unknown / Private")
         return is_target, full_desc
 
-    def filter_existing_leads(self, max_leads: int = 50, progress_callback=None) -> list[dict]:
+    def filter_existing_leads(self, max_leads: int = 50, leads_to_filter: list[dict] = None, progress_callback=None) -> list[dict]:
         """
-        فحص القائمة الحالية في leads.csv واستخراج الأشخاص المقيمين في دول Tier-1
+        فحص القائمة الحالية في leads.csv أو القائمة الممررة مباشرة واستخراج الأشخاص المقيمين في دول Tier-1
         """
-        leads = load_leads()
+        leads = leads_to_filter if leads_to_filter is not None else load_leads()
         if not leads:
-            console.print("[yellow]⚠️ No leads found in leads.csv to filter.[/yellow]")
+            console.print("[yellow]⚠️ No leads found to filter.[/yellow]")
             return []
+
+        # تجنب إعادة فحص البروفايلات المحفوظة مسبقاً في tier1_leads.csv
+        already_filtered_urls = set()
+        if TIER1_LEADS_FILE.exists():
+            try:
+                df_t1 = pd.read_csv(TIER1_LEADS_FILE, encoding='utf-8')
+                if not df_t1.empty and "profile_url" in df_t1.columns:
+                    already_filtered_urls = set(df_t1["profile_url"].dropna().astype(str).str.strip().str.lower())
+            except Exception:
+                pass
 
         console.print(f"[bold cyan]🌍 Starting Country Filter on {min(len(leads), max_leads)} leads...[/bold cyan]")
         filtered_results = []
@@ -125,6 +140,10 @@ class CountryLeadFilter:
             if not profile_url or profile_url == "N/A":
                 continue
 
+            clean_p_url = str(profile_url).strip().lower()
+            if clean_p_url in already_filtered_urls:
+                continue
+
             checked_count += 1
             if progress_callback:
                 progress_callback(f"Checking #{checked_count}/{min(len(leads), max_leads)}: {name}...")
@@ -133,9 +152,11 @@ class CountryLeadFilter:
             is_tier1, loc_desc = self.check_profile_location(profile_url)
 
             record = {
+                "id": lead.get("id") or extract_user_id(profile_url),
                 "name": name,
                 "profile_url": profile_url,
                 "post_url": lead.get("post_url", ""),
+                "comment_text": lead.get("comment_text", ""),
                 "location": loc_desc,
                 "is_tier1": is_tier1,
                 "scraped_at": datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -205,9 +226,11 @@ class CountryLeadFilter:
             if is_tier1:
                 console.print(f"[bold green]🎯 MATCH TIER-1 Member:[/bold green] {m['name']} 📍 {loc}")
                 tier1_members.append({
+                    "id": extract_user_id(m["url"]),
                     "name": m["name"],
                     "profile_url": m["url"],
                     "post_url": group_url,
+                    "comment_text": "",
                     "location": loc,
                     "is_tier1": True,
                     "scraped_at": datetime.now().strftime("%Y-%m-%d %H:%M")

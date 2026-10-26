@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import time
 import random
 from playwright.sync_api import Page
@@ -9,9 +10,76 @@ class CommentReplier:
         self.browser = browser
         self.log = log_callback if log_callback else console.print
 
-    def reply_to_commenter(self, commenter_name: str, reply_template: str) -> bool:
+    def like_comment(self, commenter_name: str) -> bool:
         """
-        البحث عن تعليق الشخص في المنشور والضغط على Reply للرد عليه مباشرة
+        وضع إعجاب (Micro-Engagement: Like ❤️) على تعليق القارئ
+        لإرسال إشعار فوري له على هاتفه وتسخين اهتمامه قبل قراءة الرسالة/الرد
+        """
+        if self.browser:
+            self.browser.verify_safety_or_raise()
+
+        self.log(f"[dim]❤️ جاري وضع إعجاب (Micro-Engagement) على تعليق: {commenter_name}...[/dim]")
+        try:
+            # 1. البحث عن حاوية التعليق التي تحتوي على اسم الشخص
+            comment_container = self.page.locator(
+                f'div[role="article"]:has-text("{commenter_name}"), '
+                f'div[aria-label*="{commenter_name}"]:has-text("Like"), '
+                f'div:has(> a:has-text("{commenter_name}"))'
+            )
+
+            like_btn = None
+            if comment_container.count() > 0:
+                for c_idx in range(min(comment_container.count(), 3)):
+                    c_elem = comment_container.nth(c_idx)
+                    btn = c_elem.locator(
+                        'div[role="button"]:has-text("Like"), '
+                        'span:has-text("Like"), '
+                        'div[role="button"]:has-text("أعجبني"), '
+                        'span:has-text("أعجبني"), '
+                        'div[role="button"]:has-text("J’aime"), '
+                        'div[role="button"]:has-text("Me gusta")'
+                    )
+                    if btn.count() > 0 and btn.first.is_visible():
+                        like_btn = btn.first
+                        break
+
+            # 2. إذا لم نجده في الحاوية المباشرة، نبحث بالقرب من اسم الشخص
+            if not like_btn:
+                name_locator = self.page.locator(f'a:has-text("{commenter_name}"), span:has-text("{commenter_name}")')
+                if name_locator.count() > 0:
+                    parent_block = name_locator.first.locator('xpath=ancestor::div[contains(@role, "article") or contains(@class, "x1")]')
+                    if parent_block.count() > 0:
+                        btn = parent_block.first.locator(
+                            'div[role="button"]:has-text("Like"), '
+                            'span:has-text("Like"), '
+                            'div[role="button"]:has-text("أعجبني"), '
+                            'span:has-text("أعجبني")'
+                        )
+                        if btn.count() > 0 and btn.first.is_visible():
+                            like_btn = btn.first
+
+            if like_btn:
+                # التحقق مما إذا كان معجب به مسبقاً لتفادي إلغاء الإعجاب
+                btn_text = like_btn.inner_text().strip().lower()
+                aria_pressed = like_btn.get_attribute("aria-pressed")
+                if aria_pressed == "true" or btn_text in ["liked", "تم الإعجاب", "je n'aime plus"]:
+                    self.log(f"[dim]ℹ️ تعليق {commenter_name} معجب به مسبقاً.[/dim]")
+                    return True
+
+                like_btn.click()
+                time.sleep(random.uniform(1.2, 2.2))
+                self.log(f"[bold green]❤️ تم وضع إعجاب (Like) بنجاح على تعليق {commenter_name} (تم إرسال إشعار فوري له)![/bold green]")
+                return True
+            else:
+                self.log(f"[dim]⚠️ تعذر العثور على زر Like لتعليق {commenter_name}.[/dim]")
+                return False
+        except Exception as e:
+            self.log(f"[dim]⚠️ تعذر وضع إعجاب على التعليق: {str(e)[:60]}[/dim]")
+            return False
+
+    def reply_to_commenter(self, commenter_name: str, reply_template: str, like_first: bool = True) -> bool:
+        """
+        البحث عن تعليق الشخص في المنشور، وضع إعجاب (اختياري)، والضغط على Reply للرد عليه مباشرة
         """
         if self.browser:
             self.browser.verify_safety_or_raise()
@@ -19,12 +87,18 @@ class CommentReplier:
         clean_first_name = commenter_name.split()[0] if commenter_name else "friend"
         personalized_text = parse_spintax(reply_template).replace("{name}", clean_first_name)
 
+        # 1. Micro-Engagement: وضع Like على تعليق الشخص أولاً إذا كان الخيار مفعلاً
+        if like_first:
+            try:
+                self.like_comment(commenter_name)
+                time.sleep(random.uniform(1.5, 2.8))
+            except Exception:
+                pass
+
         self.log(f"[cyan]💬 جاري الرد على تعليق:[/cyan] [bold]{commenter_name}[/bold]")
 
         try:
             # البحث عن عناصر التعليقات التي تحتوي على اسم الشخص
-            # في فيسبوك، اسم المعلق موجود داخل رابط أو سبان أو مقال
-            # نحدد حاوية التعليق (Comment Container)
             comment_container = self.page.locator(
                 f'div[role="article"]:has-text("{commenter_name}"), '
                 f'div[aria-label*="{commenter_name}"]:has-text("Reply"), '
@@ -33,7 +107,6 @@ class CommentReplier:
 
             reply_btn = None
             if comment_container.count() > 0:
-                # نبحث عن زر Reply داخل حاوية هذا التعليق تحديداً
                 for c_idx in range(min(comment_container.count(), 3)):
                     c_elem = comment_container.nth(c_idx)
                     btn = c_elem.locator(
@@ -53,7 +126,11 @@ class CommentReplier:
                 if name_locator.count() > 0:
                     parent_block = name_locator.first.locator('xpath=ancestor::div[contains(@role, "article") or contains(@class, "x1")]')
                     if parent_block.count() > 0:
-                        btn = parent_block.first.locator('div[role="button"]:has-text("Reply"), span:has-text("Reply"), div[role="button"]:has-text("رد")')
+                        btn = parent_block.first.locator(
+                            'div[role="button"]:has-text("Reply"), '
+                            'span:has-text("Reply"), '
+                            'div[role="button"]:has-text("رد")'
+                        )
                         if btn.count() > 0 and btn.first.is_visible():
                             reply_btn = btn.first
 

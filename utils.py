@@ -6,7 +6,7 @@ from datetime import datetime
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from config import LEADS_FILE, HISTORY_FILE, TEMPLATES_FILE, DEFAULT_SPINTAX
+from config import LEADS_FILE, HISTORY_FILE, TEMPLATES_FILE, DEFAULT_SPINTAX, REPLY_TEMPLATES_FILE, ACCOUNTS_HEALTH_FILE
 import sys
 import io
 
@@ -129,3 +129,125 @@ def show_banner():
         "[dim]Facebook Groups Comment Scraper & Safe Outreach Engine[/dim]",
         border_style="cyan"
     ))
+
+# =========================================================================
+# DATABASE 8: ACCOUNTS HEALTH & ACTION QUOTAS ENGINE
+# =========================================================================
+
+def load_accounts_health() -> dict:
+    """
+    تحميل قاعدة بيانات صحة الحسابات ومراقبة الكوطا اليومية (Database 8)
+    تقوم بإعادة تصفير العدادات اليومية تلقائياً عند بداية يوم جديد (New Calendar Day)
+    """
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    if not ACCOUNTS_HEALTH_FILE.exists():
+        return {}
+    try:
+        with open(ACCOUNTS_HEALTH_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        # تحقق من تاريخ اليوم وتصفير العدادات اليومية إذا تغير التاريخ
+        updated = False
+        for acc, stats in data.items():
+            if stats.get("last_date") != today_str:
+                stats["dms_today"] = 0
+                stats["friend_requests_today"] = 0
+                stats["posts_today"] = 0
+                stats["warmup_minutes_today"] = 0
+                stats["last_date"] = today_str
+                updated = True
+        if updated:
+            save_accounts_health(data)
+        return data
+    except Exception:
+        return {}
+
+def save_accounts_health(data: dict):
+    """حفظ قاعدة بيانات صحة الحسابات في JSON"""
+    try:
+        with open(ACCOUNTS_HEALTH_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass
+
+def get_account_health(account_name: str) -> dict:
+    """الحصول على بطاقة صحة الحساب وإحصائياته اليومية"""
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    health = load_accounts_health()
+    if account_name not in health:
+        health[account_name] = {
+            "account": account_name,
+            "status": "HEALTHY",
+            "last_date": today_str,
+            "dms_today": 0,
+            "friend_requests_today": 0,
+            "posts_today": 0,
+            "warmup_minutes_today": 0,
+            "total_dms": 0,
+            "total_friends": 0,
+            "total_posts": 0,
+            "last_active": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "last_error": None
+        }
+        save_accounts_health(health)
+    return health[account_name]
+
+def record_account_action(account_name: str, action: str, count: int = 1):
+    """
+    تسجيل عملية جديدة للحساب في Database 8:
+    action: 'dm', 'friend_request', 'group_post', 'warmup'
+    """
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    health = load_accounts_health()
+    if account_name not in health:
+        get_account_health(account_name)
+        health = load_accounts_health()
+        
+    acc_data = health[account_name]
+    acc_data["last_date"] = today_str
+    acc_data["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    if action == "dm":
+        acc_data["dms_today"] = acc_data.get("dms_today", 0) + count
+        acc_data["total_dms"] = acc_data.get("total_dms", 0) + count
+    elif action == "friend_request":
+        acc_data["friend_requests_today"] = acc_data.get("friend_requests_today", 0) + count
+        acc_data["total_friends"] = acc_data.get("total_friends", 0) + count
+    elif action == "group_post":
+        acc_data["posts_today"] = acc_data.get("posts_today", 0) + count
+        acc_data["total_posts"] = acc_data.get("total_posts", 0) + count
+    elif action == "warmup":
+        acc_data["warmup_minutes_today"] = acc_data.get("warmup_minutes_today", 0) + count
+
+    save_accounts_health(health)
+
+def update_account_status(account_name: str, status: str, reason: str = ""):
+    """
+    تحديث حالة أمان الحساب: HEALTHY, COOLDOWN, CHECKPOINT
+    """
+    health = load_accounts_health()
+    if account_name not in health:
+        get_account_health(account_name)
+        health = load_accounts_health()
+    
+    acc_data = health[account_name]
+    acc_data["status"] = status
+    acc_data["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if reason:
+        acc_data["last_error"] = f"{datetime.now().strftime('%Y-%m-%d %H:%M')} - {reason}"
+    save_accounts_health(health)
+
+def can_account_act(account_name: str, action: str, max_daily_limit: int = 15) -> bool:
+    """
+    التحقق مما إذا كان الحساب مؤهلاً لتنفيذ العملية دون تجاوز حد الأمان اليومي
+    """
+    acc_data = get_account_health(account_name)
+    if acc_data.get("status") == "CHECKPOINT":
+        return False
+    if action == "dm" and acc_data.get("dms_today", 0) >= max_daily_limit:
+        return False
+    if action == "friend_request" and acc_data.get("friend_requests_today", 0) >= max_daily_limit:
+        return False
+    if action == "group_post" and acc_data.get("posts_today", 0) >= max_daily_limit:
+        return False
+    return True

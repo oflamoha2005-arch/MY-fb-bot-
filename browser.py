@@ -4,7 +4,13 @@ import time
 import random
 from pathlib import Path
 from playwright.sync_api import sync_playwright, BrowserContext, Page
-from playwright_stealth import stealth
+try:
+    from playwright_stealth import Stealth
+    def apply_stealth(target):
+        Stealth().apply_stealth_sync(target)
+except Exception:
+    def apply_stealth(target):
+        pass
 from config import PROFILES_DIR, PROFILE_DIR
 from utils import console
 
@@ -38,7 +44,7 @@ class FacebookBrowser:
             browser_instance = self.playwright.chromium.connect_over_cdp(self.cdp_url)
             self.context = browser_instance.contexts[0] if browser_instance.contexts else browser_instance.new_context()
             self.page = self.context.pages[0] if self.context.pages else self.context.new_page()
-            stealth(self.page)
+            apply_stealth(self.page)
             return self.page
 
         args = [
@@ -62,7 +68,7 @@ class FacebookBrowser:
             channel=chrome_channel,
             args=args,
             no_viewport=True,
-            locale="en-US,en",
+            locale="en-US",
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         )
 
@@ -71,8 +77,8 @@ class FacebookBrowser:
         else:
             self.page = self.context.new_page()
 
-        stealth(self.page)
-        console.print(f"[green]✔ تم تشغيل متصفح الحساب [{self.account_name}] بنجاح![/green]")
+        apply_stealth(self.page)
+        console.print(f"[green]✔ تم تشغيل متصفح الحساب \\[{self.account_name}\\] بنجاح![/green]")
         return self.page
 
     def check_checkpoint(self) -> tuple[bool, str]:
@@ -117,20 +123,34 @@ class FacebookBrowser:
             return False, ""
 
     def verify_safety_or_raise(self):
-        """فحص الأمان، وإذا تم رصد مشكلة يطلق استثناء CheckpointDetectedError فوراً"""
+        """فحص الأمان، وإذا تم رصد مشكلة يلتقط سكرينشوت ويرسل إشعار تليجرام ويطلق استثناء CheckpointDetectedError فوراً"""
         is_checkpoint, reason = self.check_checkpoint()
         if is_checkpoint:
             console.print(f"\n[bold red]🛑 تنبيه أمني عاجل للحساب [{self.account_name}]: {reason}![/bold red]")
+            screenshot_path = None
+            try:
+                screenshots_dir = self.account_dir / "screenshots"
+                screenshots_dir.mkdir(parents=True, exist_ok=True)
+                screenshot_path = str(screenshots_dir / f"checkpoint_{int(time.time())}.png")
+                self.page.screenshot(path=screenshot_path)
+            except Exception:
+                pass
+            try:
+                from telegram_notifier import notify_checkpoint_alert
+                notify_checkpoint_alert(self.account_name, reason, screenshot_path)
+            except Exception:
+                pass
             raise CheckpointDetectedError(reason, self.page.url)
 
-    def human_warmup_session(self, duration_seconds: int, log_callback=None, stop_check=None):
+    def human_warmup_session(self, duration_seconds: int, log_callback=None, stop_check=None, label: str = ""):
         """
         محاكاة التصفح البشري العفوي (Human Session Warming):
         التمرير في الـ Feed وقراءة البوستات ووضع لايك نادر وعفوي أثناء فترة الانتظار
         لرفع درجة أمان وثقة الحساب ومنع كشف الروبوت.
         """
         log = log_callback if log_callback else console.print
-        log(f"[cyan]🌱 بدء التصفح الطبيعي في الـ Feed لتدفئة الحساب ({duration_seconds // 60} دقيقة و {duration_seconds % 60} ثانية)...[/cyan]")
+        tag = f"[{label}] " if label else ""
+        log(f"[cyan]🌱 {tag}بدء التصفح الطبيعي في الـ Feed لتدفئة الحساب ({duration_seconds // 60} دقيقة و {duration_seconds % 60} ثانية)...[/cyan]")
 
         try:
             # التوجه للصفحة الرئيسية للـ Feed

@@ -84,6 +84,24 @@ class FriendConnector:
         self.page.mouse.wheel(0, -200)
         time.sleep(1.0)
 
+        # فحص سيكولوجيا البروفايل: عدد الأصدقاء (يجب أن يكون أكثر من 300 وأقل من 4950)
+        try:
+            page_text = self.page.locator('body').inner_text()
+            friend_match = re.search(r'([\d\.,]+)\s*([kK])?\s*(?:friends|amis|صديق)', page_text, re.IGNORECASE)
+            if friend_match:
+                raw_num = friend_match.group(1).replace(',', '')
+                base_num = float(raw_num)
+                friend_count = int(base_num * 1000) if friend_match.group(2) else int(base_num)
+                
+                if friend_count < 300:
+                    console.print(f"[yellow]⚠️ {user_name} لديه {friend_count} صديق فقط (< 300). بروفايل عائلي/مغلق، تخطي لتفادي الرفض.[/yellow]")
+                    return "low_friends_count"
+                if friend_count >= 4950:
+                    console.print(f"[yellow]⚠️ {user_name} قارب أو وصل لسقف الـ 5,000 صديق ({friend_count}). تخطي.[/yellow]")
+                    return "friend_limit_reached"
+        except Exception:
+            pass
+
         # Look for "Add friend" buttons across multiple languages
         # English: "Add friend"
         # French: "Ajouter comme ami(e)"
@@ -181,7 +199,13 @@ class FriendConnector:
 
         try:
             df = pd.read_csv(target_file, encoding='utf-8')
-            leads = df.to_dict('records')
+            all_leads = df.to_dict('records')
+            # استثناء من تم مراسلتهم في الخاص (DM) لضمان استهداف جمهور جديد ومضاعفة الوصول
+            from utils import load_history
+            dm_history = load_history()
+            leads = [l for l in all_leads if str(l.get('id', '')) not in dm_history]
+            if len(all_leads) != len(leads):
+                console.print(f"[dim]تم استبعاد {len(all_leads) - len(leads)} قارئ لأنهم استلموا رسائل خاصة مسبقاً (فصل الجمهورين بنجاح).[/dim]")
         except Exception as e:
             return {"sent": 0, "status": f"Error loading {target_file.name}: {e}"}
 
